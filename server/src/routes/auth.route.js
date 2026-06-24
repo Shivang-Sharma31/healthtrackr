@@ -18,13 +18,13 @@ router.route("/register").post(
 router.route("/login" ).post( loginUser)
 router.route("/verify-email/:verificationToken").get(verifyEmail);
 router.route("/refresh-token").post(refreshAccessToken);
-
+router
+    .route("/resend-email-verification")
+    .get(resendEmailVerification);
 
 //secured routes
 router.route("/logout").post(verifyJWT, logoutUser);
 router.route("/current-user").get(verifyJWT, getCurrentUser);
-router
-    .route("/resend-email-verification")
-    .get(verifyJWT, resendEmailVerification);
+
 
 export default router
