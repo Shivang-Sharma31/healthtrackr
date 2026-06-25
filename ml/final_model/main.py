@@ -21,19 +21,34 @@ class RRCFEngine:
         return pickle.dumps(forest)
 
     def predict_and_update(self, serialized_forest, feature_vector, current_index):
+        # If no state is passed (Day 1), load the global pretrained model
         if not serialized_forest:
-            serialized_forest = self.initialize_forest()
+            try:
+                with open("global_pretrained_rrcf.pkl", "rb") as f:
+                    serialized_forest = f.read()
+            except FileNotFoundError:
+                # Safety fallback
+                serialized_forest = self.initialize_forest()
             
         forest = pickle.loads(serialized_forest)
         point = np.array(feature_vector)
         anomaly_score = 0
 
         for tree in forest:
+            # 1. Figure out the next unique ID for this specific tree
+            if len(tree.leaves) > 0:
+                new_index = max(tree.leaves.keys()) + 1
+            else:
+                new_index = 0
+
+            # 2. If the tree is full, find the absolute oldest ID and drop it
             if len(tree.leaves) >= self.tree_size:
-                tree.forget_point(current_index - self.tree_size)
+                oldest_index = min(tree.leaves.keys())
+                tree.forget_point(oldest_index)
             
-            tree.insert_point(point, index=current_index)
-            anomaly_score += tree.codisp(current_index)
+            # 3. Insert the new point and calculate the score
+            tree.insert_point(point, index=new_index)
+            anomaly_score += tree.codisp(new_index)
 
         avg_score = anomaly_score / self.num_trees
         
@@ -41,7 +56,6 @@ class RRCFEngine:
             "rrcf_score": float(avg_score),
             "updated_forest_bytes": pickle.dumps(forest)
         }
-
 class StreamingZScoreEngine:
     def __init__(self, span=20, thresh_start=2.5, thresh_end=1.8, n_days=30):
         self.alpha = 2 / (span + 1)
