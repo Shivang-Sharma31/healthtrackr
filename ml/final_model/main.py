@@ -2,12 +2,13 @@ import os
 import pickle
 import numpy as np
 import rrcf
+import base64
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 
 # ==========================================
-# 1. CORE ENGINES (Your Custom Logic)
+# 1. CORE ENGINES (Unchanged)
 # ==========================================
 
 class RRCFEngine:
@@ -31,7 +32,6 @@ class RRCFEngine:
             if len(tree.leaves) >= self.tree_size:
                 tree.forget_point(current_index - self.tree_size)
             
-            # Insert new point and score
             tree.insert_point(point, index=current_index)
             anomaly_score += tree.codisp(current_index)
 
@@ -41,7 +41,6 @@ class RRCFEngine:
             "rrcf_score": float(avg_score),
             "updated_forest_bytes": pickle.dumps(forest)
         }
-
 
 class StreamingZScoreEngine:
     def __init__(self, span=20, thresh_start=2.5, thresh_end=1.8, n_days=30):
@@ -100,26 +99,33 @@ class StreamingZScoreEngine:
 # ==========================================
 
 app = FastAPI(
-    title="HealthTrackr Streaming API",
-    description="Real-time multi-tenant health anomaly detection using RRCF and Streaming Z-Score.",
-    version="1.1.0"
+    title="HealthTrackr Stateless API",
+    description="Stateless real-time health anomaly detection.",
+    version="2.0.0"
 )
 
 # Core engine workers
 rrcf_worker = RRCFEngine()
 zscore_worker = StreamingZScoreEngine()
 
-# In-Memory Cache to store user states across sequential requests
-# Key: user_id (str) -> Value: dict containing serialized trees, moving metrics, and timeframe steps
-STATE_CACHE: Dict[str, Dict[str, Any]] = {}
+# STATE_CACHE IS REMOVED
 
-# Pydantic Schemas for Payload Validation
+# ==========================================
+# 3. PYDANTIC SCHEMAS (UPDATED)
+# ==========================================
+
 class HealthMetricsInput(BaseModel):
-    heart_rate: float = Field(..., description="Average heart rate for the day", example=72.0)
-    systolic_bp: float = Field(..., description="Systolic blood pressure", example=120.0)
-    blood_sugar: float = Field(..., description="Fasting or average blood sugar level", example=95.0)
-    steps: float = Field(..., description="Total count of physical steps logged", example=8500.0)
-    water_intake: float = Field(..., description="Total water intake in liters or ml", example=2.5)
+    # Health Data
+    heart_rate: float
+    systolic_bp: float
+    blood_sugar: float
+    steps: float
+    water_intake: float
+    
+    # State Data (Passed in from JS Backend)
+    stream_index: int = Field(0, description="The current day count for this user")
+    rrcf_state_b64: Optional[str] = Field(None, description="Base64 encoded PKL string of the model. Null if day 1.")
+    zscore_state: Optional[Dict[str, Any]] = Field(None, description="JSON dictionary of moving averages. Null if day 1.")
 
 class ZScoreOutput(BaseModel):
     max_z: float
@@ -132,27 +138,31 @@ class AnalysisResponse(BaseModel):
     rrcf_anomaly_score: float
     zscore_metrics: ZScoreOutput
     trigger_alert: bool
+    
+    # State Data (Returned to JS Backend for saving)
+    updated_rrcf_state_b64: str
+    updated_zscore_state: Dict[str, Any]
 
 # ==========================================
-# 3. CONTROLLERS / ENDPOINTS
+# 4. CONTROLLERS / ENDPOINTS (UPDATED)
 # ==========================================
 
-@app.post(
-    "/analyze/{user_id}", 
-    response_model=AnalysisResponse, 
-    status_code=status.HTTP_200_OK,
-    summary="Process streaming metrics for a specific user profile"
-)
+@app.post("/analyze/{user_id}", response_model=AnalysisResponse, status_code=status.HTTP_200_OK)
 async def analyze_metrics(user_id: str, payload: HealthMetricsInput):
-    """
-    Ingests daily metrics, evaluates them against the user's specific mathematical state history,
-    updates their model configurations, and flags structural anomalies in streaming behaviors.
-    """
-    # 1. Fetch historical state tracking from cache
-    user_profile = STATE_CACHE.get(user_id, {"rrcf": None, "zscore": None, "index": 0})
-    next_index = user_profile["index"] + 1
+    
+    # 1. Decode the RRCF state from Base64 string back into raw Python bytes
+    # If it's day 1 (None), keep it as None so the engine initializes it.
+    rrcf_bytes = None
+    if payload.rrcf_state_b64:
+        try:
+            rrcf_bytes = base64.b64decode(payload.rrcf_state_b64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid Base64 string for rrcf_state_b64")
 
-    # 2. Structure payloads for dedicated algorithms using the 5 new metrics
+    # 2. Advance the time index
+    next_index = payload.stream_index + 1
+
+    # 3. Structure payloads for dedicated algorithms
     rrcf_vector = [
         payload.heart_rate, 
         payload.systolic_bp, 
@@ -170,15 +180,15 @@ async def analyze_metrics(user_id: str, payload: HealthMetricsInput):
     }
 
     try:
-        # 3. Execute isolated model evaluations and update state variables
+        # 4. Execute isolated model evaluations and update state variables
         rrcf_output = rrcf_worker.predict_and_update(
-            serialized_forest=user_profile["rrcf"],
+            serialized_forest=rrcf_bytes,
             feature_vector=rrcf_vector,
             current_index=next_index
         )
 
         zscore_output = zscore_worker.predict_and_update(
-            previous_state=user_profile["zscore"],
+            previous_state=payload.zscore_state,
             current_features=zscore_map
         )
     except Exception as err:
@@ -187,19 +197,13 @@ async def analyze_metrics(user_id: str, payload: HealthMetricsInput):
             detail=f"Mathematical engine execution failed: {str(err)}"
         )
 
-    # 4. Save modifications seamlessly back to the state cache
-    STATE_CACHE[user_id] = {
-        "rrcf": rrcf_output["updated_forest_bytes"],
-        "zscore": zscore_output["updated_state"],
-        "index": next_index
-    }
+    # 5. Convert the newly updated raw bytes BACK to a Base64 string for the JSON response
+    new_rrcf_b64 = base64.b64encode(rrcf_output["updated_forest_bytes"]).decode('utf-8')
 
-    # 5. Evaluate dynamic thresholds to flag an immediate alert condition
-    # Note: With 5 dimensions instead of 3, the baseline RRCF scores may shift slightly. 
-    # You may need to tune this 45.0 threshold after observing real-world data.
     is_rrcf_anomalous = rrcf_output["rrcf_score"] > 45.0 
     is_zscore_anomalous = zscore_output["is_anomaly"]
 
+    # 6. Return everything (including the updated states) back to your friend
     return {
         "user_id": user_id,
         "stream_index": next_index,
@@ -209,13 +213,8 @@ async def analyze_metrics(user_id: str, payload: HealthMetricsInput):
             "dynamic_threshold": round(zscore_output["threshold_used"], 3) if "threshold_used" in zscore_output else 0.0,
             "is_anomaly": is_zscore_anomalous
         },
-        "trigger_alert": bool(is_rrcf_anomalous or is_zscore_anomalous)
+        "trigger_alert": bool(is_rrcf_anomalous or is_zscore_anomalous),
+        
+        "updated_rrcf_state_b64": new_rrcf_b64,
+        "updated_zscore_state": zscore_output["updated_state"]
     }
-
-@app.delete("/reset/{user_id}", status_code=status.HTTP_200_OK)
-async def reset_user_state(user_id: str):
-    """Clears a user's tracking state to restart streaming calculations fresh."""
-    if user_id in STATE_CACHE:
-        del STATE_CACHE[user_id]
-        return {"message": f"Successfully dropped streaming state cache for user: {user_id}"}
-    raise HTTPException(status_code=404, detail="User target not found in active state cache.")
