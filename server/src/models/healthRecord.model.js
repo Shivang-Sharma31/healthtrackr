@@ -34,10 +34,15 @@ const healthRecordSchema = new mongoose.Schema(
             max: [100000, "Steps seems unrealistic"],
         },
         water_intake: {
-            type: Number, // Store in ml for consistency
+            type: Number,
             default: 0,
             min: [0, "Water intake cannot be negative"],
-            max: [10000, "Water intake seems unrealistic (in ml)"],
+            max: [10, "Water intake seems unrealistic (in litre)"],
+        },
+        dateString: {
+            type: String, // Format: "2026-06-25"
+            required: true,
+            index: true,
         },
         recordedAt: {
             type: Date,
@@ -48,7 +53,7 @@ const healthRecordSchema = new mongoose.Schema(
         },
     },
     {
-        timestamps: false, // We use recordedAt for TTL, so no need for timestamps
+        timestamps: false,
     }
 );
 
@@ -56,7 +61,6 @@ const healthRecordSchema = new mongoose.Schema(
 // This helps with queries like "get all records for user X in last N days"
 healthRecordSchema.index({ userId: 1, recordedAt: -1 });
 
-// Pre-save middleware for data validation
 healthRecordSchema.pre("save", function () {
     // Ensure recordedAt is set (in case it's manually overridden)
     if (!this.recordedAt) {
@@ -64,20 +68,140 @@ healthRecordSchema.pre("save", function () {
     }
 });
 
-// Static method to create a new health record
 healthRecordSchema.statics.createRecord = async function (userId, healthData) {
     try {
+        // ========== STEP 1: Extract and validate recordedAt ==========
+        let recordedAt = healthData.recordedAt
+            ? new Date(healthData.recordedAt)
+            : new Date();
+
+        // Check if date is valid
+        if (isNaN(recordedAt.getTime())) {
+            throw new ApiError(
+                400,
+                "Invalid date format. Use ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)"
+            );
+        }
+
+        // ========== STEP 2: Prevent future dates ==========
+        const now = new Date();
+        if (recordedAt > now) {
+            throw new ApiError(400, "Cannot log health data for future dates");
+        }
+
+        // ========== STEP 3: Prevent logging data older than 30 days ==========
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        if (recordedAt < thirtyDaysAgo) {
+            throw new ApiError(
+                400,
+                `Cannot log data older than 30 days. Oldest allowed date: ${thirtyDaysAgo.toISOString()}`
+            );
+        }
+
+        // ========== STEP 4: Extract date string (YYYY-MM-DD) ==========
+        // This is the KEY PART for "one per day"
+        // We extract just the date part, ignoring the time
+
+        const year = recordedAt.getFullYear();
+        const month = String(recordedAt.getMonth() + 1).padStart(2, "0");
+        const date = String(recordedAt.getDate()).padStart(2, "0");
+        const dateString = `${year}-${month}-${date}`; // e.g., "2026-06-25"
+
+        // ========== STEP 5: Check if record already exists for this DATE ==========
+        // Query: find record with same userId and same dateString
+        const existingRecord = await this.findOne({
+            userId,
+            dateString,
+        });
+
+        // If found, reject with friendly error
+        if (existingRecord) {
+            const dateObj = new Date(recordedAt);
+            const formattedDate = dateObj.toLocaleDateString("en-US", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+            }); // e.g., "Thursday, June 25, 2026"
+
+            throw new ApiError(
+                400,
+                `You've already logged your health data for ${formattedDate}. You can only log once per day. Your previous record was at ${existingRecord.recordedAt.toLocaleTimeString()}.`
+            );
+        }
+
+        // ========== STEP 6: CREATE NEW RECORD ==========
         const record = new this({
             userId,
-            ...healthData,
+            heart_rate: healthData.heart_rate,
+            systolic_bp: healthData.systolic_bp,
+            blood_sugar: healthData.blood_sugar,
+            steps: healthData.steps || 0,
+            water_intake: healthData.water_intake || 0,
+            recordedAt,
+            dateString, // Store the date string for future queries
         });
-        return await record.save();
+
+        await record.save();
+
+        // ========== STEP 7: Generate user-friendly success message ==========
+        const todayString = new Date().toISOString().split("T")[0];
+        const isToday = dateString === todayString;
+
+        const message = isToday
+            ? "✅ Your health data has been logged for today"
+            : `✅ Your health data has been logged for ${recordedAt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`;
+
+        return {
+            success: true,
+            message,
+            record,
+        };
     } catch (error) {
-        throw new ApiError(400,`Failed to create health record: ${error.message}`);
+        // Re-throw ApiError if it's already an ApiError
+        if (error.statusCode) {
+            throw error;
+        }
+
+        // Handle unique index violations (if using optional unique index)
+        if (error.code === 11000) {
+            throw new ApiError(
+                400,
+                "You have already logged your health data for this date. You can only log once per day."
+            );
+        }
+
+        // Wrap other errors
+        throw new ApiError(
+            400,
+            `Failed to create health record: ${error.message}`
+        );
     }
 };
 
-// Static method to get user's health records (last N days)
+healthRecordSchema.statics.findByIdAndUpdate = function () {
+    throw new ApiError(
+        403,
+        "Health records cannot be updated. Create a new record instead if you need to log different data."
+    );
+};
+
+healthRecordSchema.statics.updateOne = function () {
+    throw new ApiError(
+        403,
+        "Health records cannot be updated. Create a new record instead if you need to log different data."
+    );
+};
+
+healthRecordSchema.statics.updateMany = function () {
+    throw new ApiError(
+        403,
+        "Health records cannot be updated. Create a new record instead if you need to log different data."
+    );
+};
+
 healthRecordSchema.statics.getRecentRecords = async function (
     userId,
     days = 30
@@ -91,7 +215,6 @@ healthRecordSchema.statics.getRecentRecords = async function (
     }).sort({ recordedAt: -1 });
 };
 
-// Static method to manually delete old records (optional, for backup cleanup)
 healthRecordSchema.statics.deleteOldRecords = async function (days = 30) {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);
@@ -103,7 +226,6 @@ healthRecordSchema.statics.deleteOldRecords = async function (days = 30) {
     return result; // Returns { deletedCount: number }
 };
 
-// Static method to get statistics for anomaly detection
 healthRecordSchema.statics.getStatistics = async function (userId, days = 30) {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - days);

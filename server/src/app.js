@@ -22,8 +22,12 @@ app.use(
 
 import healthCheckRouter from "./routes/healthcheck.route.js";
 import userRouter from "./routes/auth.route.js";
+import healthRecordRouter from "./routes/healthRecord.route.js"
+import { errorHandler } from "./middlewares/error.middleware.js";
 
 app.use("/api/users", userRouter);
 app.use("/api/healthcheck" , healthCheckRouter)
+app.use("/api/healthrecord", healthRecordRouter)
 
+app.use(errorHandler);
 export { app };
