@@ -62,7 +62,7 @@ const Register = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background Decorative Elements */}
-      <div className="absolute top-0 right-0 w-full h-64 bg-gradient-to-bl from-blue-700 via-blue-600 to-indigo-500 -z-10 opacity-10 blur-3xl"></div>
+      <div className="absolute top-0 right-0 w-full h-64 bg-linear-to-br from-blue-700 via-blue-600 to-indigo-500 -z-10 opacity-10 blur-3xl"></div>
       <div className="absolute -top-24 -left-24 w-96 h-96 bg-cyan-200 rounded-full blur-3xl opacity-20 -z-10"></div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">

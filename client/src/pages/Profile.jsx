@@ -51,7 +51,7 @@ const Profile = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-12">
       {/* Dynamic Header/Banner */}
-      <div className="relative h-64 bg-gradient-to-br from-blue-700 via-blue-600 to-indigo-500 overflow-hidden">
+      <div className="relative h-64 bg-linear-to-br from-blue-700 via-blue-600 to-indigo-500 overflow-hidden">
         <div className="absolute inset-0 opacity-20">
           <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-white rounded-full blur-3xl"></div>
           <div className="absolute bottom-[-20%] right-[-5%] w-80 h-80 bg-cyan-300 rounded-full blur-3xl"></div>
@@ -97,7 +97,7 @@ const Profile = () => {
           {/* Stats Grid */}
           <div className="grid grid-cols-1 gap-4 mt-10">
             {/* Main Metric */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-3xl p-6 transition-transform hover:scale-[1.02] duration-300">
+            <div className="bg-linear-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-3xl p-6 transition-transform hover:scale-[1.02] duration-300">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-blue-600 font-bold text-xs uppercase tracking-widest">Activity Impact</p>
