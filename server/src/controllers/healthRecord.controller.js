@@ -112,11 +112,6 @@ const createHealthRecord = asyncHandler(async (req, res) => {
 });
 
 const healthPrediction = asyncHandler(async (req, res) => {
-    const { date } = req.body;
-
-    if (!date) {
-        throw new ApiError(400, "Date is required");
-    }
 
     const userId = req.user?._id;
 
@@ -125,11 +120,11 @@ const healthPrediction = asyncHandler(async (req, res) => {
     }
 
     const healthRecord = await HealthRecord.findOne({
-        $and: [{ userId }, { dateString: date }],
-    });
+        userId,
+    }).sort({ recordedAt: -1 });
 
     if (!healthRecord) {
-        throw new ApiError(400, "There is no health record on that date");
+        throw new ApiError(404, "No health records found.");
     }
 
     const targetApi = process.env.ML_API_URL;
