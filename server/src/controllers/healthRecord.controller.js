@@ -249,11 +249,18 @@ const healthPrediction = asyncHandler(async (req, res) => {
             throw new ApiError(500, "Unable to update user counter doc");
         }
 
-        return res
-            .status(200)
-            .json(
-                new ApiResponse(200, { prediction }, "Successfully predicted")
-            );
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {
+                    prediction,
+                    stream_index: predictionResponse.data.stream_index,
+                    rrcf_anomaly_score: predictionResponse.data.rrcf_anomaly_score,
+                    zscore_metrics: predictionResponse.data.zscore_metrics,
+                },
+                "Successfully predicted"
+            )
+            )
     } catch (error) {
         if (error instanceof ApiError) throw error;
 
