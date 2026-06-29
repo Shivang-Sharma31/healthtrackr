@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
+import { type } from "os";
 
 const healthRecordSchema = new mongoose.Schema(
     {
@@ -51,17 +52,27 @@ const healthRecordSchema = new mongoose.Schema(
                 },
                 stream_index: {
                     type: Number,
-                    default: 0
+                    default: 0,
                 },
                 rrcf_anomaly_score: {
                     type: Number,
-                    default: 0
+                    default: 0,
                 },
                 zscore_metrics: {
-                    type: Number,
-                    default: 0
+                    max_z: {
+                        type: Number,
+                        default: 0,
+                    },
+                    dynamic_threshold: {
+                        type: Number,
+                        default: 0,
+                    },
+                    is_anomaly: {
+                        type: Boolean,
+                        default: false
+                    }
                 },
-            }
+            },
         },
         dateString: {
             type: String, // Format: "2026-06-25"
