@@ -112,7 +112,6 @@ const createHealthRecord = asyncHandler(async (req, res) => {
 });
 
 const healthPrediction = asyncHandler(async (req, res) => {
-
     const userId = req.user?._id;
 
     if (!userId) {
@@ -125,6 +124,29 @@ const healthPrediction = asyncHandler(async (req, res) => {
 
     if (!healthRecord) {
         throw new ApiError(404, "No health records found.");
+    }
+
+    if (healthRecord.prediction_records.usedForPrediction) {
+        return res.status(200).json(
+            new ApiResponse(
+                200,
+                {
+                    prediction:
+                        healthRecord.prediction_records.predictionData
+                            .prediction,
+                    stream_index:
+                        healthRecord.prediction_records.predictionData
+                            .stream_index,
+                    rrcf_anomaly_score:
+                        healthRecord.prediction_records.predictionData
+                            .rrcf_anomaly_score,
+                    zscore_metrics:
+                        healthRecord.prediction_records.predictionData
+                            .zscore_metrics,
+                },
+                "You already used prediction for latest health record."
+            )
+        );
     }
 
     const targetApi = process.env.ML_API_URL;
@@ -211,6 +233,17 @@ const healthPrediction = asyncHandler(async (req, res) => {
             await User.findByIdAndUpdate(req.user._id, {
                 $inc: { counter: 1 },
             });
+
+            healthRecord.prediction_records.usedForPrediction = true;
+            healthRecord.prediction_records.predictionData.prediction = prediction
+            healthRecord.prediction_records.predictionData.rrcf_anomaly_score =
+                predictionResponse.data.rrcf_anomaly_score
+            healthRecord.prediction_records.predictionData.stream_index =
+                predictionResponse.data.stream_index;
+            healthRecord.prediction_records.predictionData.zscore_metrics =
+                predictionResponse.data.zscore_metrics;
+
+            await healthRecord.save({ validateBeforeSave: false });
         } catch (error) {
             console.log(error);
             throw new ApiError(500, "Unable to update user counter doc");
@@ -219,8 +252,8 @@ const healthPrediction = asyncHandler(async (req, res) => {
         return res
             .status(200)
             .json(
-                new ApiResponse(200,{prediction}, "Successfully predicted")
-            )
+                new ApiResponse(200, { prediction }, "Successfully predicted")
+            );
     } catch (error) {
         if (error instanceof ApiError) throw error;
 

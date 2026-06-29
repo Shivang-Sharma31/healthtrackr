@@ -39,6 +39,30 @@ const healthRecordSchema = new mongoose.Schema(
             min: [0, "Water intake cannot be negative"],
             max: [10, "Water intake seems unrealistic (in litre)"],
         },
+        prediction_records: {
+            usedForPrediction: {
+                type: Boolean,
+                default: false,
+            },
+            predictionData: {
+                prediction: {
+                    type: Boolean,
+                    default: false,
+                },
+                stream_index: {
+                    type: Number,
+                    default: 0
+                },
+                rrcf_anomaly_score: {
+                    type: Number,
+                    default: 0
+                },
+                zscore_metrics: {
+                    type: Number,
+                    default: 0
+                },
+            }
+        },
         dateString: {
             type: String, // Format: "2026-06-25"
             required: true,
