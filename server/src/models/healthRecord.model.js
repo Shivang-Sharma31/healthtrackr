@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
+import { type } from "os";
 
 const healthRecordSchema = new mongoose.Schema(
     {
@@ -38,6 +39,40 @@ const healthRecordSchema = new mongoose.Schema(
             default: 0,
             min: [0, "Water intake cannot be negative"],
             max: [10, "Water intake seems unrealistic (in litre)"],
+        },
+        prediction_records: {
+            usedForPrediction: {
+                type: Boolean,
+                default: false,
+            },
+            predictionData: {
+                prediction: {
+                    type: Boolean,
+                    default: false,
+                },
+                stream_index: {
+                    type: Number,
+                    default: 0,
+                },
+                rrcf_anomaly_score: {
+                    type: Number,
+                    default: 0,
+                },
+                zscore_metrics: {
+                    max_z: {
+                        type: Number,
+                        default: 0,
+                    },
+                    dynamic_threshold: {
+                        type: Number,
+                        default: 0,
+                    },
+                    is_anomaly: {
+                        type: Boolean,
+                        default: false
+                    }
+                },
+            },
         },
         dateString: {
             type: String, // Format: "2026-06-25"
