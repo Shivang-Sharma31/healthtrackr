@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+numpy
+rrcf
+pydantic
+setuptools<81.0.0

@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 
 const sendEmail = async (options) => {
     const mailGenerator = new Mailgen({
-        theme: "default",
+        theme: "cerberus",
         product: {
             name: "Task Manager",
             link: "https://taskmanagelink.com",
@@ -54,7 +54,7 @@ const emailVerificationMaingenContent = (username, verificationUrl) => {
                 button: {
                     color: "#22BC66", // Optional action button color
                     text: "Verify your email",
-                    link: verificationUrl,
+                    link: verificationUrl,                   
                 },
             },
             outro: "Need help, or have questions? Just reply to this email, we'd love to help.",
@@ -62,7 +62,33 @@ const emailVerificationMaingenContent = (username, verificationUrl) => {
     };
 };
 
+const healthAnomalyAlertContent = (username, dashboardUrl) => {
+    return {
+        body: {
+            name: username,
+            intro: [
+                "⚠️ Alert: Unusual health metrics detected.",
+                "Our automated health monitoring system has identified some anomalies in your tracked metrics over the past 24 hours that deviate from your normal baseline.",
+            ],
+            action: {
+                instructions:
+                    "Please log into your account to review your logs.",
+                button: {
+                    color: "#D9534F",
+                    text: "Review Health Dashboard",
+                    link: dashboardUrl,
+                },
+            },
+            outro: [
+                "🔬 Medical Disclaimer: This is an automated notification based on a machine learning model and does not substitute for professional medical advice. If you are feeling genuinely unwell, experiencing symptoms, or having a medical emergency, please consult a healthcare professional or contact emergency services immediately.",
+                "Take care of yourself!",
+            ],
+        },
+    };
+};
+
 export {
     emailVerificationMaingenContent,
     sendEmail,
+    healthAnomalyAlertContent,
 };
