@@ -3,34 +3,6 @@ import pandas as pd
 import rrcf
 import pickle
 
-def generate_synthetic_vitals(seed=42):
-    np.random.seed(seed)
-    days = 30
-    n_users = 50
-    total_records = days * n_users
-
-    heart_rate = np.random.normal(75, 10, total_records)
-    systolic_bp = np.random.normal(120, 15, total_records)
-    blood_sugar = np.random.normal(100, 20, total_records)
-    steps = np.random.poisson(8000, total_records)
-    water_intake = np.random.normal(2.5, 0.5, total_records)
-
-    df = pd.DataFrame({
-        'heart_rate': heart_rate,
-        'systolic_bp': systolic_bp,
-        'blood_sugar': blood_sugar,
-        'steps': steps,
-        'water_intake': water_intake
-    })
-
-    anomaly_indices = np.random.choice(total_records, size=int(total_records * 0.05), replace=False)
-    for idx in anomaly_indices:
-        df.loc[idx, 'heart_rate'] += np.random.uniform(40, 60)
-        df.loc[idx, 'systolic_bp'] -= np.random.uniform(30, 50)
-        df.loc[idx, 'water_intake'] -= np.random.uniform(1.0, 2.0)
-
-    return df, anomaly_indices
-
 def main():
     training_file = r"E:\health_trackr_ml\health_Vitals_dataset.csv"
     features = ['heart_rate', 'systolic_bp', 'blood_sugar', 'steps', 'water_intake']
